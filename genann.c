@@ -677,7 +677,7 @@ double const *genann_run(genann const *ann, double const *inputs) {
      */
     memcpy(ann->output, inputs, sizeof(double) * ann->inputs);
 
-    int h, j, k;
+    int h, j;
 
     /* 情况1: 没有隐藏层（单层感知机）
      * 直接从输入层计算到输出层
