@@ -8,9 +8,9 @@ license = "Zlib"
 readme = "README.md"
 
 [dependencies]
+rand = "0.8"
 
 [dev-dependencies]
-rand = "0.8"
 
 [features]
 default = []

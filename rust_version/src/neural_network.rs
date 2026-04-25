@@ -18,7 +18,7 @@
 //! - 随机初始化权重的范围 (-0.5 到 0.5)
 //! - 偏置的处理方式 (第一个权重 * -1.0)
 
-use crate::activation::ActivationFunction;
+use crate::activation::{Activation, ActivationFunction};
 use crate::error::{NeuralNetworkError, Result};
 use std::fmt;
 
@@ -50,13 +50,13 @@ use std::fmt;
 #[derive(Clone)]
 pub struct NeuralNetwork {
     /// 输入层神经元数量
-    inputs: usize,
+    input_count: usize,
     /// 隐藏层数量
-    hidden_layers: usize,
+    hidden_layer_count: usize,
     /// 每个隐藏层的神经元数量
-    hidden: usize,
+    hidden_neuron_count: usize,
     /// 输出层神经元数量
-    outputs: usize,
+    output_count: usize,
 
     /// 所有权重
     ///
@@ -72,7 +72,7 @@ pub struct NeuralNetwork {
     ///
     /// 布局: [输入层输出, 隐藏层1输出, ..., 隐藏层N输出, 输出层输出]
     /// 注意: 输入层的"输出"就是输入值本身
-    outputs: Vec<f64>,
+    neuron_outputs: Vec<f64>,
 
     /// 所有神经元的误差增量
     ///
@@ -80,21 +80,21 @@ pub struct NeuralNetwork {
     deltas: Vec<f64>,
 
     /// 隐藏层激活函数
-    hidden_activation: Box<dyn ActivationFunction>,
+    hidden_activation: Activation,
 
     /// 输出层激活函数
-    output_activation: Box<dyn ActivationFunction>,
+    output_activation: Activation,
 }
 
 impl fmt::Debug for NeuralNetwork {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("NeuralNetwork")
-            .field("inputs", &self.inputs)
-            .field("hidden_layers", &self.hidden_layers)
-            .field("hidden", &self.hidden)
-            .field("outputs", &self.outputs)
+            .field("inputs", &self.input_count)
+            .field("hidden_layers", &self.hidden_layer_count)
+            .field("hidden", &self.hidden_neuron_count)
+            .field("outputs", &self.output_count)
             .field("total_weights", &self.weights.len())
-            .field("total_neurons", &self.outputs.len())
+            .field("total_neurons", &self.neuron_outputs.len())
             .field(
                 "hidden_activation",
                 &self.hidden_activation.name(),
@@ -187,22 +187,22 @@ impl NeuralNetwork {
 
         // 创建向量
         let mut weights = vec![0.0; total_weights];
-        let outputs = vec![0.0; total_neurons];
+        let neuron_outputs = vec![0.0; total_neurons];
         let deltas = vec![0.0; total_neurons - inputs];
 
         // 随机初始化权重（与 C 版本相同的范围: -0.5 到 0.5）
         Self::randomize_weights(&mut weights);
 
         Ok(NeuralNetwork {
-            inputs,
-            hidden_layers,
-            hidden,
-            outputs,
+            input_count: inputs,
+            hidden_layer_count: hidden_layers,
+            hidden_neuron_count: hidden,
+            output_count: outputs,
             weights,
-            outputs,
+            neuron_outputs,
             deltas,
-            hidden_activation: Box::new(crate::activation::SigmoidCached::new()),
-            output_activation: Box::new(crate::activation::SigmoidCached::new()),
+            hidden_activation: Activation::SigmoidCached,
+            output_activation: Activation::SigmoidCached,
         })
     }
 
@@ -226,22 +226,22 @@ impl NeuralNetwork {
 
     /// 获取输入层神经元数量
     pub fn inputs(&self) -> usize {
-        self.inputs
+        self.input_count
     }
 
     /// 获取隐藏层数量
     pub fn hidden_layers(&self) -> usize {
-        self.hidden_layers
+        self.hidden_layer_count
     }
 
     /// 获取每个隐藏层的神经元数量
     pub fn hidden(&self) -> usize {
-        self.hidden
+        self.hidden_neuron_count
     }
 
     /// 获取输出层神经元数量
     pub fn outputs(&self) -> usize {
-        self.outputs
+        self.output_count
     }
 
     /// 获取总权重数量
@@ -251,7 +251,7 @@ impl NeuralNetwork {
 
     /// 获取总神经元数量（包含输入层）
     pub fn total_neurons(&self) -> usize {
-        self.outputs.len()
+        self.neuron_outputs.len()
     }
 
     /// 获取权重的引用
@@ -269,13 +269,13 @@ impl NeuralNetwork {
     // ========================================================================
 
     /// 设置隐藏层激活函数
-    pub fn set_hidden_activation<A: ActivationFunction + 'static>(&mut self, activation: A) {
-        self.hidden_activation = Box::new(activation);
+    pub fn set_hidden_activation(&mut self, activation: Activation) {
+        self.hidden_activation = activation;
     }
 
     /// 设置输出层激活函数
-    pub fn set_output_activation<A: ActivationFunction + 'static>(&mut self, activation: A) {
-        self.output_activation = Box::new(activation);
+    pub fn set_output_activation(&mut self, activation: Activation) {
+        self.output_activation = activation;
     }
 
     // ========================================================================
@@ -301,76 +301,76 @@ impl NeuralNetwork {
     /// ```
     /// use genann_rs::NeuralNetwork;
     ///
-    /// let nn = NeuralNetwork::new(2, 1, 2, 1).unwrap();
+    /// let mut nn = NeuralNetwork::new(2, 1, 2, 1).unwrap();
     /// let output = nn.run(&[0.5, 0.8]).unwrap();
     /// assert_eq!(output.len(), 1);
     /// ```
     pub fn run(&mut self, inputs: &[f64]) -> Result<&[f64]> {
         // 验证输入长度
-        if inputs.len() != self.inputs {
+        if inputs.len() != self.input_count {
             return Err(NeuralNetworkError::input_mismatch(
-                self.inputs,
+                self.input_count,
                 inputs.len(),
             ));
         }
 
         // 将输入复制到 outputs 数组的开头（与 C 版本相同）
         // 这样可以统一处理第一层
-        self.outputs[..self.inputs].copy_from_slice(inputs);
+        self.neuron_outputs[..self.input_count].copy_from_slice(inputs);
 
         // 权重索引
         let mut w_idx = 0;
 
         // 输出索引（跳过输入层）
-        let mut o_idx = self.inputs;
+        let mut o_idx = self.input_count;
 
         // 输入索引（指向当前层的输入）
         let mut i_idx = 0;
 
         // 情况1: 没有隐藏层（感知机）
-        if self.hidden_layers == 0 {
+        if self.hidden_layer_count == 0 {
             let output_start = o_idx;
 
-            for _ in 0..self.outputs {
+            for _ in 0..self.output_count {
                 // 计算加权和
-                let sum = self.compute_dot_product(&mut w_idx, i_idx, self.inputs);
+                let sum = self.compute_dot_product(&mut w_idx, i_idx, self.input_count);
                 // 应用激活函数
-                self.outputs[o_idx] = self.output_activation.activate(sum);
+                self.neuron_outputs[o_idx] = self.output_activation.activate(sum);
                 o_idx += 1;
             }
 
-            return Ok(&self.outputs[output_start..]);
+            return Ok(&self.neuron_outputs[output_start..]);
         }
 
         // 情况2: 有隐藏层
 
         // 第一步: 计算第一隐藏层
-        for _ in 0..self.hidden {
-            let sum = self.compute_dot_product(&mut w_idx, i_idx, self.inputs);
-            self.outputs[o_idx] = self.hidden_activation.activate(sum);
+        for _ in 0..self.hidden_neuron_count {
+            let sum = self.compute_dot_product(&mut w_idx, i_idx, self.input_count);
+            self.neuron_outputs[o_idx] = self.hidden_activation.activate(sum);
             o_idx += 1;
         }
-        i_idx += self.inputs;
+        i_idx += self.input_count;
 
         // 第二步: 计算后续隐藏层
-        for _ in 1..self.hidden_layers {
-            for _ in 0..self.hidden {
-                let sum = self.compute_dot_product(&mut w_idx, i_idx, self.hidden);
-                self.outputs[o_idx] = self.hidden_activation.activate(sum);
+        for _ in 1..self.hidden_layer_count {
+            for _ in 0..self.hidden_neuron_count {
+                let sum = self.compute_dot_product(&mut w_idx, i_idx, self.hidden_neuron_count);
+                self.neuron_outputs[o_idx] = self.hidden_activation.activate(sum);
                 o_idx += 1;
             }
-            i_idx += self.hidden;
+            i_idx += self.hidden_neuron_count;
         }
 
         // 第三步: 计算输出层
         let output_start = o_idx;
-        for _ in 0..self.outputs {
-            let sum = self.compute_dot_product(&mut w_idx, i_idx, self.hidden);
-            self.outputs[o_idx] = self.output_activation.activate(sum);
+        for _ in 0..self.output_count {
+            let sum = self.compute_dot_product(&mut w_idx, i_idx, self.hidden_neuron_count);
+            self.neuron_outputs[o_idx] = self.output_activation.activate(sum);
             o_idx += 1;
         }
 
-        Ok(&self.outputs[output_start..])
+        Ok(&self.neuron_outputs[output_start..])
     }
 
     /// 计算加权和（点积）
@@ -399,7 +399,7 @@ impl NeuralNetwork {
 
         // 计算加权和
         for k in 0..n {
-            sum += self.weights[*w_idx] * self.outputs[i_idx + k];
+            sum += self.weights[*w_idx] * self.neuron_outputs[i_idx + k];
             *w_idx += 1;
         }
 
@@ -436,15 +436,15 @@ impl NeuralNetwork {
         learning_rate: f64,
     ) -> Result<()> {
         // 验证输入输出长度
-        if inputs.len() != self.inputs {
+        if inputs.len() != self.input_count {
             return Err(NeuralNetworkError::input_mismatch(
-                self.inputs,
+                self.input_count,
                 inputs.len(),
             ));
         }
-        if desired_outputs.len() != self.outputs {
+        if desired_outputs.len() != self.output_count {
             return Err(NeuralNetworkError::output_mismatch(
-                self.outputs,
+                self.output_count,
                 desired_outputs.len(),
             ));
         }
@@ -456,7 +456,7 @@ impl NeuralNetwork {
         self.compute_output_deltas(desired_outputs);
 
         // 第三步: 计算隐藏层的 delta（如果有隐藏层）
-        if self.hidden_layers > 0 {
+        if self.hidden_layer_count > 0 {
             self.compute_hidden_deltas();
         }
 
@@ -469,22 +469,15 @@ impl NeuralNetwork {
     /// 计算输出层的误差增量
     fn compute_output_deltas(&mut self, desired_outputs: &[f64]) {
         // 输出层在 outputs 数组中的起始位置
-        let output_start = self.inputs + self.hidden * self.hidden_layers;
+        let output_start = self.input_count + self.hidden_neuron_count * self.hidden_layer_count;
         // 输出层 delta 在 deltas 数组中的起始位置
-        let delta_start = self.hidden * self.hidden_layers;
+        let delta_start = self.hidden_neuron_count * self.hidden_layer_count;
 
-        // 检查是否使用线性激活函数
-        // 注意: 这里简化处理，只检查常见的情况
-        // 实际上需要知道激活函数的类型
-
-        for i in 0..self.outputs {
-            let output = self.outputs[output_start + i];
+        for i in 0..self.output_count {
+            let output = self.neuron_outputs[output_start + i];
             let desired = desired_outputs[i];
 
             // 计算 delta
-            // 对于 sigmoid: delta = (desired - output) * output * (1 - output)
-            // 对于 linear: delta = desired - output
-            //
             // 这里使用 trait 的 derivative 方法
             let delta = self.output_activation.derivative(output) * (desired - output);
 
@@ -495,52 +488,52 @@ impl NeuralNetwork {
     /// 计算隐藏层的误差增量
     fn compute_hidden_deltas(&mut self) {
         // 从最后一个隐藏层开始，向前传播
-        for h in (0..self.hidden_layers).rev() {
+        for h in (0..self.hidden_layer_count).rev() {
             // 当前隐藏层的输出起始位置
-            let output_start = self.inputs + h * self.hidden;
+            let output_start = self.input_count + h * self.hidden_neuron_count;
             // 当前隐藏层的 delta 起始位置
-            let delta_start = h * self.hidden;
+            let delta_start = h * self.hidden_neuron_count;
 
             // 下一层的 delta 起始位置
-            let next_delta_start = (h + 1) * self.hidden;
+            let next_delta_start = (h + 1) * self.hidden_neuron_count;
 
             // 下一层的权重起始位置
             // 这里需要精确计算权重位置，与 C 版本保持一致
             let next_weight_start = if h == 0 {
                 // 第一隐藏层的下一层权重起始位置
-                (self.inputs + 1) * self.hidden
+                (self.input_count + 1) * self.hidden_neuron_count
             } else {
                 // 其他隐藏层的下一层权重起始位置
-                (self.inputs + 1) * self.hidden + h * (self.hidden + 1) * self.hidden
+                (self.input_count + 1) * self.hidden_neuron_count + h * (self.hidden_neuron_count + 1) * self.hidden_neuron_count
             };
 
             // 下一层的神经元数量
-            let next_neurons = if h == self.hidden_layers - 1 {
+            let next_neurons = if h == self.hidden_layer_count - 1 {
                 // 最后一个隐藏层的下一层是输出层
-                self.outputs
+                self.output_count
             } else {
                 // 其他隐藏层的下一层也是隐藏层
-                self.hidden
+                self.hidden_neuron_count
             };
 
-            for j in 0..self.hidden {
-                let output = self.outputs[output_start + j];
+            for j in 0..self.hidden_neuron_count {
+                let output = self.neuron_outputs[output_start + j];
 
                 // 计算后续层对当前神经元的误差贡献
                 let mut delta = 0.0;
                 for k in 0..next_neurons {
-                    let forward_delta = if h == self.hidden_layers - 1 {
+                    let forward_delta = if h == self.hidden_layer_count - 1 {
                         // 下一层是输出层
-                        self.deltas[self.hidden * self.hidden_layers + k]
+                        self.deltas[self.hidden_neuron_count * self.hidden_layer_count + k]
                     } else {
                         // 下一层是隐藏层
                         self.deltas[next_delta_start + k]
                     };
 
                     // 计算权重索引
-                    // 每个下一层神经元有 (self.hidden + 1) 个权重
+                    // 每个下一层神经元有 (self.hidden_neuron_count + 1) 个权重
                     // j + 1 跳过偏置
-                    let w_idx = next_weight_start + k * (self.hidden + 1) + (j + 1);
+                    let w_idx = next_weight_start + k * (self.hidden_neuron_count + 1) + (j + 1);
                     let forward_weight = self.weights[w_idx];
 
                     delta += forward_delta * forward_weight;
@@ -556,26 +549,26 @@ impl NeuralNetwork {
     /// 更新权重
     fn update_weights(&mut self, learning_rate: f64) {
         // 权重索引
-        let mut w_idx = 0;
+        let mut w_idx;
 
         // 第一步: 更新输出层权重（如果有隐藏层）
-        if self.hidden_layers > 0 {
+        if self.hidden_layer_count > 0 {
             // 输出层权重的起始位置
-            let output_weight_start = (self.inputs + 1) * self.hidden
-                + (self.hidden_layers - 1) * (self.hidden + 1) * self.hidden;
+            let output_weight_start = (self.input_count + 1) * self.hidden_neuron_count
+                + (self.hidden_layer_count - 1) * (self.hidden_neuron_count + 1) * self.hidden_neuron_count;
             w_idx = output_weight_start;
 
             // 输出层的输入（最后一个隐藏层的输出）
-            let input_start = if self.hidden_layers > 0 {
-                self.inputs + (self.hidden_layers - 1) * self.hidden
+            let input_start = if self.hidden_layer_count > 0 {
+                self.input_count + (self.hidden_layer_count - 1) * self.hidden_neuron_count
             } else {
                 0
             };
 
             // 输出层 delta 起始位置
-            let delta_start = self.hidden * self.hidden_layers;
+            let delta_start = self.hidden_neuron_count * self.hidden_layer_count;
 
-            for j in 0..self.outputs {
+            for j in 0..self.output_count {
                 let delta = self.deltas[delta_start + j];
 
                 // 更新偏置权重
@@ -583,13 +576,13 @@ impl NeuralNetwork {
                 w_idx += 1;
 
                 // 更新其他权重
-                let input_count = if self.hidden_layers > 0 {
-                    self.hidden
+                let input_count = if self.hidden_layer_count > 0 {
+                    self.hidden_neuron_count
                 } else {
-                    self.inputs
+                    self.input_count
                 };
                 for k in 0..input_count {
-                    self.weights[w_idx] += delta * learning_rate * self.outputs[input_start + k];
+                    self.weights[w_idx] += delta * learning_rate * self.neuron_outputs[input_start + k];
                     w_idx += 1;
                 }
             }
@@ -597,33 +590,33 @@ impl NeuralNetwork {
 
         // 第二步: 更新隐藏层权重
         // 从最后一个隐藏层开始，向前更新
-        for h in (0..self.hidden_layers).rev() {
+        for h in (0..self.hidden_layer_count).rev() {
             // 当前隐藏层的权重起始位置
             let weight_start = if h == 0 {
                 0
             } else {
-                (self.inputs + 1) * self.hidden + (h - 1) * (self.hidden + 1) * self.hidden
+                (self.input_count + 1) * self.hidden_neuron_count + (h - 1) * (self.hidden_neuron_count + 1) * self.hidden_neuron_count
             };
             w_idx = weight_start;
 
             // 当前隐藏层的 delta 起始位置
-            let delta_start = h * self.hidden;
+            let delta_start = h * self.hidden_neuron_count;
 
             // 当前隐藏层的输入起始位置
             let input_start = if h == 0 {
                 0 // 第一隐藏层的输入是原始输入
             } else {
-                self.inputs + (h - 1) * self.hidden
+                self.input_count + (h - 1) * self.hidden_neuron_count
             };
 
             // 输入数量
             let input_count = if h == 0 {
-                self.inputs
+                self.input_count
             } else {
-                self.hidden
+                self.hidden_neuron_count
             };
 
-            for j in 0..self.hidden {
+            for j in 0..self.hidden_neuron_count {
                 let delta = self.deltas[delta_start + j];
 
                 // 更新偏置权重
@@ -632,18 +625,18 @@ impl NeuralNetwork {
 
                 // 更新其他权重
                 for k in 0..input_count {
-                    self.weights[w_idx] += delta * learning_rate * self.outputs[input_start + k];
+                    self.weights[w_idx] += delta * learning_rate * self.neuron_outputs[input_start + k];
                     w_idx += 1;
                 }
             }
         }
 
         // 如果没有隐藏层，更新输入层到输出层的权重
-        if self.hidden_layers == 0 {
+        if self.hidden_layer_count == 0 {
             w_idx = 0;
             let delta_start = 0; // 没有隐藏层时，输出层 delta 从 0 开始
 
-            for j in 0..self.outputs {
+            for j in 0..self.output_count {
                 let delta = self.deltas[delta_start + j];
 
                 // 更新偏置权重
@@ -651,8 +644,8 @@ impl NeuralNetwork {
                 w_idx += 1;
 
                 // 更新其他权重
-                for k in 0..self.inputs {
-                    self.weights[w_idx] += delta * learning_rate * self.outputs[k];
+                for k in 0..self.input_count {
+                    self.weights[w_idx] += delta * learning_rate * self.neuron_outputs[k];
                     w_idx += 1;
                 }
             }
@@ -667,7 +660,7 @@ impl NeuralNetwork {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::activation::{Linear, Sigmoid, Threshold};
+    use crate::activation::Activation;
 
     #[test]
     fn test_new_invalid_params() {
@@ -742,8 +735,8 @@ mod tests {
         let mut nn = NeuralNetwork::new(2, 1, 2, 1).unwrap();
 
         // 设置隐藏层激活函数为阈值
-        nn.set_hidden_activation(Threshold::new());
-        nn.set_output_activation(Threshold::new());
+        nn.set_hidden_activation(Activation::Threshold);
+        nn.set_output_activation(Activation::Threshold);
 
         // 设置权重（与 test.c 相同）
         // 第一隐藏层:
@@ -782,7 +775,7 @@ mod tests {
     fn test_set_activation() {
         let mut nn = NeuralNetwork::new(2, 1, 2, 1).unwrap();
 
-        nn.set_hidden_activation(Linear::new());
-        nn.set_output_activation(Sigmoid::new());
+        nn.set_hidden_activation(Activation::Linear);
+        nn.set_output_activation(Activation::Sigmoid);
     }
 }

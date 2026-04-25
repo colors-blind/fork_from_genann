@@ -24,6 +24,7 @@ use std::f64::consts::E;
 /// use genann_rs::activation::ActivationFunction;
 ///
 /// // 自定义 ReLU 激活函数
+/// #[derive(Clone, Debug)]
 /// struct ReLU;
 ///
 /// impl ActivationFunction for ReLU {
@@ -387,8 +388,9 @@ mod tests {
         let s = SigmoidCached::new();
 
         // 测试边界情况
-        assert!((s.activate(-20.0) - 0.0).abs() < 1e-10);
-        assert!((s.activate(20.0) - 1.0).abs() < 1e-10);
+        // 注意: 查找表只覆盖 [-15, 15]，所以 -20 返回的是 sigmoid(-15) ≈ 3e-7
+        assert!(s.activate(-20.0) < 1e-5);
+        assert!(s.activate(20.0) > 1.0 - 1e-5);
 
         // 测试 0 点（应该接近 0.5）
         assert!((s.activate(0.0) - 0.5).abs() < 0.01);

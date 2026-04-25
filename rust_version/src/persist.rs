@@ -20,7 +20,7 @@
 use crate::error::{NeuralNetworkError, Result};
 use crate::neural_network::NeuralNetwork;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
 
 /// 保存神经网络到文件
@@ -244,7 +244,7 @@ pub fn read_from<R: BufRead>(mut reader: R) -> Result<NeuralNetwork> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::activation::Threshold;
+    use crate::activation::Activation;
     use std::io::Cursor;
 
     #[test]
@@ -287,8 +287,8 @@ mod tests {
         let mut nn = read_from(Cursor::new(c_format_data)).unwrap();
 
         // 设置激活函数
-        nn.set_hidden_activation(Threshold::new());
-        nn.set_output_activation(Threshold::new());
+        nn.set_hidden_activation(Activation::Threshold);
+        nn.set_output_activation(Activation::Threshold);
 
         // 验证 XOR
         let inputs = [[0.0, 0.0], [0.0, 1.0], [1.0, 0.0], [1.0, 1.0]];

@@ -5,7 +5,7 @@
 use std::error::Error;
 use std::fmt;
 use std::io;
-use std::num::ParseFloatError;
+use std::num::{ParseFloatError, ParseIntError};
 
 /// 神经网络操作的结果类型
 pub type Result<T> = std::result::Result<T, NeuralNetworkError>;
@@ -110,6 +110,12 @@ impl From<io::Error> for NeuralNetworkError {
 impl From<ParseFloatError> for NeuralNetworkError {
     fn from(err: ParseFloatError) -> Self {
         NeuralNetworkError::Parse(format!("Failed to parse float: {}", err))
+    }
+}
+
+impl From<ParseIntError> for NeuralNetworkError {
+    fn from(err: ParseIntError) -> Self {
+        NeuralNetworkError::Parse(format!("Failed to parse integer: {}", err))
     }
 }
 

@@ -42,7 +42,7 @@
 //! }
 //!
 //! // 测试网络
-//! let result = nn.run(&[0.0, 1.0]);
+//! let result = nn.run(&[0.0, 1.0]).unwrap();
 //! assert!((result[0] - 1.0).abs() < 0.1);
 //! ```
 
