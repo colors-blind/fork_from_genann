@@ -1,0 +1,22 @@
+[package]
+name = "genann-rs"
+version = "0.1.0"
+edition = "2021"
+description = "Rust implementation of GENANN - Minimal C Artificial Neural Network"
+authors = ["Lewis Van Winkle (original C version)", "Rust port"]
+license = "Zlib"
+readme = "README.md"
+
+[dependencies]
+
+[dev-dependencies]
+rand = "0.8"
+
+[features]
+default = []
+
+# 使用 f32 而不是 f64，可以获得更好的性能和 SIMD 支持
+f32 = []
+
+# 启用 SIMD 优化（需要 nightly Rust）
+simd = []
