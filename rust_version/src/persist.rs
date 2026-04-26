@@ -94,51 +94,7 @@ pub fn save(nn: &NeuralNetwork, path: impl AsRef<Path>) -> Result<()> {
 pub fn load(path: impl AsRef<Path>) -> Result<NeuralNetwork> {
     let file = File::open(path)?;
     let reader = BufReader::new(file);
-    let mut lines = reader.lines();
-
-    // 读取第一行：网络结构
-    let first_line = lines
-        .next()
-        .ok_or_else(|| NeuralNetworkError::Parse("Unexpected end of file".into()))??;
-
-    let parts: Vec<&str> = first_line.split_whitespace().collect();
-    if parts.len() != 4 {
-        return Err(NeuralNetworkError::Parse(format!(
-            "Expected 4 numbers in first line, got {}",
-            parts.len()
-        )));
-    }
-
-    let inputs: usize = parts[0].parse()?;
-    let hidden_layers: usize = parts[1].parse()?;
-    let hidden: usize = parts[2].parse()?;
-    let outputs: usize = parts[3].parse()?;
-
-    // 创建神经网络
-    let mut nn = NeuralNetwork::new(inputs, hidden_layers, hidden, outputs)?;
-
-    // 读取第二行：权重
-    let second_line = lines
-        .next()
-        .ok_or_else(|| NeuralNetworkError::Parse("Unexpected end of file".into()))??;
-
-    let weights: Vec<f64> = second_line
-        .split_whitespace()
-        .map(|s| s.parse::<f64>())
-        .collect::<std::result::Result<Vec<f64>, _>>()?;
-
-    if weights.len() != nn.total_weights() {
-        return Err(NeuralNetworkError::Parse(format!(
-            "Expected {} weights, got {}",
-            nn.total_weights(),
-            weights.len()
-        )));
-    }
-
-    // 复制权重
-    nn.weights_mut().copy_from_slice(&weights);
-
-    Ok(nn)
+    read_from(reader)
 }
 
 /// 将神经网络写入 writer
@@ -178,6 +134,9 @@ pub fn write_to<W: Write>(nn: &NeuralNetwork, mut writer: W) -> Result<()> {
 /// 从 reader 读取神经网络
 ///
 /// 与 `load` 类似，但接受任何实现了 `BufRead` trait 的类型。
+///
+/// 与 C 版本的 `genann_read` 行为一致，可以读取 C 版本保存的文件。
+/// C 版本将所有数据写在同一行，Rust 版本支持一行或两行格式。
 ///
 /// # 参数
 /// * `reader` - 实现了 `BufRead` trait 的对象
