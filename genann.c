@@ -376,11 +376,12 @@ static inline double genann_dot_product_sse2(double const **w_ptr, double const 
         i += GENANN_SIMD_WIDTH;
     }
     
-    /* 水平相加: [a, b] -> [a+b, a+b] */
-    __m128d hsum = _mm_hadd_pd(sum_vec, sum_vec);
-    
+    /* 水平相加: [a, b] -> a + b */
+    /* 使用 SSE2 兼容的方式（_mm_hadd_pd 是 SSE3 指令） */
+    __m128d high = _mm_unpackhi_pd(sum_vec, sum_vec);
+    __m128d sum2 = _mm_add_sd(sum_vec, high);
     double simd_sum;
-    _mm_store_sd(&simd_sum, hsum);
+    _mm_store_sd(&simd_sum, sum2);
     sum += simd_sum;
     
     /* 处理剩余元素 */
